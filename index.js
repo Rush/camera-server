@@ -18,6 +18,12 @@ function getFrame() {
 let savedFrame;
 let savedDate;
 
+function getStats() {
+  return child_process.execAsync('mon -a').spread((stdout, stderr) => {
+    return stdout;
+  });
+}
+
 function loopOnce() {
   getFrame().then(frame => {
     savedDate = new Date();
@@ -27,16 +33,22 @@ function loopOnce() {
   });
 }
 
+
 loopOnce();
 
-const server = http.createServer((req, res) => {
+const server = http.createServer(async (req, res) => {
+  const stats = await getStats();
   if(req.url === '/snapshot.jpg' && savedFrame) {
     res.writeHead(200, {'Content-Type': 'image/jpeg', 'Content-Size': savedFrame.length});
     return res.end(savedFrame);
   }
   else if(req.url === '/') {
     res.writeHead(200, {'Content-Type': 'text/html'});
-    return res.end('<html><body>' + savedDate.toISOString() + '<br><img src="/snapshot.jpg"></body></html>')
+    return res.end(`<html><body>${savedDate.toISOString()}<br><img src="/snapshot.jpg"><br>
+    <div>
+      ${stats.replace(/\n/, '<br>', 'g')}
+    </div>
+    </body></html>`)
   } else {
     res.writeHead(404);
     return res.end();
