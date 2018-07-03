@@ -18,7 +18,7 @@ const getFrame = memoize(function() {
     console.error(stderr.toString('utf8'));
     return stdout;
   });
-}, { timeout: 5000, promise: 'then' });
+}, { maxAge: 5000, promise: 'then' });
 
 var savedFrame;
 var savedDate;
@@ -27,7 +27,7 @@ const getStats = memoize(() => {
   return child_process.execAsync('ssh -o ConnectTimeout=1 ethos@192.168.1.102 mon -a').spread((stdout, stderr) => {
     return stdout.toString('utf8');
   });
-}, { timeout: 2000, promise: 'then' });
+}, { maxAge: 2000, promise: 'then' });
 
 const server = http.createServer(async (req, res) => {
   if(req.url === '/snapshot.jpg') {
