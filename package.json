@@ -10,5 +10,8 @@
   "license": "ISC",
   "dependencies": {
     "bluebird": "^3.5.1"
+  },
+  "devDependencies": {
+    "memoizee": "^0.4.12"
   }
 }

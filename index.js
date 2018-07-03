@@ -1,53 +1,52 @@
-const http = require('http');
-const child_process = require('child_process');
-const Promise = require('bluebird');
+var http = require('http');
+var child_process = require('child_process');
+var Promise = require('bluebird');
+const memoize = require('memoizee');
 
 Promise.promisifyAll(child_process, {
   multiArgs: true
 });
 
-function getFrame() {
-  return child_process.execAsync('ffmpeg -y -f video4linux2 -s 1280x960 -i /dev/video0 -ss 0:0:2 -f mjpeg -frames 1 -', {
+const resolution = '1280x960';
+
+const getFrame = memoize(function() {
+  console.log('Getting frame');
+  savedDate = new Date();
+  return child_process.execAsync(`ffmpeg -y -f video4linux2 -s ${resolution} -i /dev/video0 -ss 0:0:2 -f mjpeg -frames 1 -`, {
     encoding: 'buffer'
   }).spread((stdout, stderr) => {
     console.error(stderr.toString('utf8'));
     return stdout;
   });
-}
+}, { timeout: 5000, promise: 'then' });
 
-let savedFrame;
-let savedDate;
+var savedFrame;
+var savedDate;
 
-function getStats() {
-  return child_process.execAsync('mon -a').spread((stdout, stderr) => {
-    return stdout;
+const getStats = memoize(() => {
+  return child_process.execAsync('ssh -o ConnectTimeout=1 ethos@192.168.1.102 mon -a').spread((stdout, stderr) => {
+    return stdout.toString('utf8');
   });
-}
-
-function loopOnce() {
-  getFrame().then(frame => {
-    savedDate = new Date();
-    savedFrame = frame;
-  }).finally(() => {
-    setTimeout(loopOnce, 5000);
-  });
-}
-
-
-loopOnce();
+}, { timeout: 2000, promise: 'then' });
 
 const server = http.createServer(async (req, res) => {
-  const stats = await getStats();
-  if(req.url === '/snapshot.jpg' && savedFrame) {
-    res.writeHead(200, {'Content-Type': 'image/jpeg', 'Content-Size': savedFrame.length});
-    return res.end(savedFrame);
+  if(req.url === '/snapshot.jpg') {
+    console.log('Getting snapshot');
+    const frame = await getFrame();
+    res.writeHead(200, {'Content-Type': 'image/jpeg', 'Content-Size': frame.length});
+    return res.end(frame);
   }
-  else if(req.url === '/') {
+
+  const stats = await getStats().catch(err => {
+    return err.message;
+  });
+
+  if(req.url === '/') {
     res.writeHead(200, {'Content-Type': 'text/html'});
-    return res.end(`<html><body>${savedDate.toISOString()}<br><img src="/snapshot.jpg"><br>
-    <div>
-      ${stats.replace(/\n/, '<br>', 'g')}
-    </div>
+    return res.end(`<html><body><div style="font-family: monospace;">
+      ${stats.replace(/\n/g, '<br>').replace(/ /g, '&nbsp;')}
+     </div>
+     <br><img style="transform: rotate(0deg);" src="/snapshot.jpg"><br>
     </body></html>`)
   } else {
     res.writeHead(404);
@@ -58,3 +57,10 @@ const server = http.createServer(async (req, res) => {
 server.on('listening', () => {
   console.log('Listening');
 });
+
+if(global.gc) {
+  setInterval(() => {
+    console.log('Doing GC');
+    global.gc();
+  }, 60000);
+}
